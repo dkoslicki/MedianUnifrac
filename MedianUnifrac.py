@@ -1,11 +1,53 @@
 
 import numpy as np
 import re
+import sys
 import warnings
+
+epsilon = sys.float_info.epsilon
+
+def parse_tree_file(tree_str_file, suppress_internal_node_taxa=True, suppress_leaf_node_taxa=False):
+    '''
+    (Tint,lint,nodes_in_order) = parse_tree(tree_str_file)
+    This function will parse a newick tree file (in the file given by tree_str_file) and return the dictionary of ancestors Tint.
+    Tint indexes the nodes by integers, Tint[i] = j means j is the ancestor of i.
+    lint is a dictionary returning branch lengths: lint[i,j] = w(i,j) the weight of the edge connecting i and j.
+    nodes_in_order is a list of the nodes in the input tree_str such that T[i]=j means nodes_in_order[j] is an ancestor
+    of nodes_in_order[i]. Nodes are labeled from the leaves up.
+    '''
+    dtree = dendropy.Tree.get(path=tree_str_file, schema="newick",
+                            suppress_internal_node_taxa=suppress_internal_node_taxa,
+                            store_tree_weights=True,
+                            suppress_leaf_node_taxa = suppress_leaf_node_taxa)
+    #Name all the internal nodes
+    nodes = dtree.nodes()
+    i=0
+    for node in nodes:
+        if node.taxon == None:
+            node.taxon = dendropy.datamodel.taxonmodel.Taxon(label="temp"+str(i))
+            i = i+1
+    full_nodes_in_order = [item for item in dtree.levelorder_node_iter()]  # i in path from root to j only if i>j
+    full_nodes_in_order.reverse()
+    nodes_in_order = [item.taxon.label for item in full_nodes_in_order]  # i in path from root to j only if i>j
+    Tint = dict()
+    lint = dict()
+    nodes_to_index = dict(zip(nodes_in_order, range(len(nodes_in_order))))
+    for i in range(len(nodes_in_order)):
+        node = full_nodes_in_order[i]
+        parent = node.parent_node
+        if parent != None:
+            Tint[i] = nodes_to_index[parent.taxon.label]
+            if isinstance(node.edge.length, float):
+                lint[nodes_to_index[node.taxon.label], nodes_to_index[parent.taxon.label]] = node.edge.length
+            else:
+                lint[nodes_to_index[node.taxon.label], nodes_to_index[parent.taxon.label]] = 0.0
+    return (Tint,lint,nodes_in_order)
 
 def push_up(P, Tint, lint, nodes_in_order):
     P_pushed = P + 0  # don't want to stomp on P
     for i in range(len(nodes_in_order) - 1):
+        if lint[i, Tint[i]] == 0:
+            lint[i, Tint[i]] = epsilon
         P_pushed[Tint[i]] += P_pushed[i]  # push mass up
         P_pushed[i] *= lint[i, Tint[i]]  # multiply mass at this node by edge length above it
     return P_pushed
@@ -13,11 +55,13 @@ def push_up(P, Tint, lint, nodes_in_order):
 def inverse_push_up(P, Tint, lint, nodes_in_order):
     P_pushed = np.zeros(P.shape)  # don't want to stomp on P
     for i in range(len(nodes_in_order) - 1):
-        edge_length = lint[i, Tint[i]]
+        if lint[i, Tint[i]] == 0:
+            edge_length = epsilon
+        else:
+            edge_length = lint[i, Tint[i]]
         p_val = P[i]
-        if edge_length > 0:
-            P_pushed[i] += 1/edge_length * p_val  # re-adjust edge lengths
-            P_pushed[Tint[i]] -= 1/edge_length * p_val  # propagate mass upward, via subtraction, only using immediate descendants
+        P_pushed[i] += 1/edge_length * p_val  # re-adjust edge lengths
+        P_pushed[Tint[i]] -= 1/edge_length * p_val  # propagate mass upward, via subtraction, only using immediate descendants
     root = len(nodes_in_order) - 1
     P_pushed[root] += P[root]
     return P_pushed
