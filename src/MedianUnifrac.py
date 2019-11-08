@@ -86,8 +86,7 @@ def create_env(sample_file):
             key = list.pop(0) #get key
             env_dict[key] = dict()
             for str in list:
-                m = re.match(r"(\d+).(\w+)_(\d+)", str)
-                sample = m.group(2)
+                sample = str.split('_')[0]
                 if sample in env_dict[key]:
                     env_dict[key][sample] += 1
                 else:
