@@ -1,46 +1,63 @@
-import MedianUnifrac as MU
-import pickle
+
+from src import MedianUnifrac as MedU
 import numpy as np
 
-env_dict = pickle.load(open("env_dict.p", "rb"))
-Tint = pickle.load(open("Tint.p", "rb"))
-Lint = pickle.load(open("Lint.p", "rb"))
-nodes_in_order = pickle.load(open("nodes_in_order.p", "rb"))
-(env_prob_dict, samples) = MU.parse_envs(env_dict, nodes_in_order)
+(Tint, lint, nodes_in_order) = MedU.parse_tree_file('../data/97_otus_unannotated.tree')
+env_dict = MedU.create_env('../data/289_seqs_otus.txt')
+(env_prob_dict, samples) = MedU.parse_envs(env_dict, nodes_in_order)
 
+#test parse_tree
+def test_parse_tree():
+    tree_str = '((B:0.1,C:0.2)A:0.3);'
+    (Tint1, lint1, nodes_in_order1) = MedU.parse_tree(tree_str)
+    assert Tint1 == {0: 2, 1: 2, 2: 3}
+    assert lint1 == {(1, 2): 0.1, (2, 3): 0.3, (0, 2): 0.2}
+    assert nodes_in_order1 == ['C', 'B', 'A', 'temp0']  # temp0 is the root node
 
-#simple test
-P = env_prob_dict['M2Lsft217']
-Q = env_prob_dict['M2Midr217']
+#test push_up and inverse_push_up
+def test_inverse():
+    #simple tests
+    P1 = np.array([0.1, 0.2, 0,  0.3, 0, 0.3, 0.1])
+    T1 = {0: 4, 1: 4, 2: 5, 3: 5, 4: 6, 5: 6}
+    l1 = {(0, 4): 0.1, (1, 4): 0.1, (2, 5): 0.2, (3, 5): 0, (4, 6): 0.2, (5, 6): 0.2} # 0 edge_length not involving the root
+    nodes1 = ['A', 'B', 'C', 'D', 'temp0', 'temp1', 'temp2']
+    P_pushed1 = MedU.push_up(P1, T1, l1, nodes1)
+    x = MedU.epsilon * 0.3
+    answer1 = np.array([0.01, 0.02, 0, x, 0.06, 0.12, 1])
+    assert all(np.abs(P_pushed1 - answer1) < 0.00000001) #test push_up
+    assert P_pushed1[3] > 10**-18 #P_pushed[3] (edge length 0) is non-zero
+    P_inversed1 = MedU.inverse_push_up(P_pushed1, T1, l1, nodes1)
+    assert np.sum(abs(P1 - P_inversed1)) < 10**-10 #test inverse_push_up
+    #test with real data
+    P2 = env_prob_dict['232.M2Lsft217']
+    P_pushed2 = MedU.push_up(P2, Tint, lint, nodes_in_order)
+    P_inversed2 = MedU.inverse_push_up(P_pushed2, Tint, lint, nodes_in_order)
+    assert np.sum(abs(P2 - P_inversed2)) < 10**-10
 
-test = MU.push_up(P, Tint, Lint, nodes_in_order)
-test2 = MU.push_up(Q, Tint, Lint, nodes_in_order)
-print(np.sum(np.abs(test-test2)))
-#there's an issue with this
+#test if push_up computes the correct unifrac value
+def test_push_up():
+    tree_str = '((B:0.1,C:0.2)A:0.3);'  # there is an internal node (temp0) here.
+    (T1, l1, nodes1) = MedU.parse_tree(tree_str)
+    nodes_samples = {
+        'C': {'sample1': 1, 'sample2': 0},
+        'B': {'sample1': 1, 'sample2': 1},
+        'A': {'sample1': 0, 'sample2': 0},
+        'temp0': {'sample1': 0, 'sample2': 1}}  # temp0 is the root node
+    (nodes_weighted, samples_temp) = MedU.parse_envs(nodes_samples, nodes1)
+    unifrac1 = np.sum(np.abs(MedU.push_up(nodes_weighted['sample1'], T1, l1, nodes1) -
+                  MedU.push_up(nodes_weighted['sample2'], T1, l1, nodes1)))
+    assert unifrac1 == 0.25
+    #test with real data
+    P = env_prob_dict['232.M9Okey217']
+    Q = env_prob_dict['232.M3Indl217']
+    unifrac2 = np.sum(np.abs(MedU.push_up(P, Tint, lint, nodes_in_order) -
+                             MedU.push_up(Q, Tint, lint, nodes_in_order)))
+    EMDUnifrac = 0.08224035523709478 #calculated using EMDUnifrac_weighted
+    assert np.abs(unifrac2 - EMDUnifrac) < 10**-8
 
-#test inverse
-P_pushed = MU.push_up(P, Tint, Lint, nodes_in_order)
-P_inverse_pushed = MU.inverse_push_up(P_pushed, Tint, Lint, nodes_in_order)
-print(np.sum(np.abs(P - P_inverse_pushed)))
+def run_tests():
+    test_parse_tree()
+    test_inverse()
+    test_push_up()
 
-#randomized test
-is_negative = []
-num_its = 10
-for num_vectors in range(10, len(samples), 10):
-    print (num_vectors)
-    for i in range(num_its):
-        selected_samples = np.random.choice(list(samples), num_vectors, replace = False)
-        Ps = []
-        for sample in selected_samples:
-            Ps.append(env_prob_dict[sample])
-        Ps_pushed = []
-        for P in Ps:
-            Ps_pushed.append(MU.push_up(P, Tint, Lint, nodes_in_order))
-        median = np.median(Ps_pushed, axis=0)
-        median_inv = MU.inverse_push_up(median, Tint, Lint, nodes_in_order)
-        if np.any(median<0):
-            is_negative.append(1)
-        else:
-            is_negative.append(0)
-
-print is_negative
+run_tests()

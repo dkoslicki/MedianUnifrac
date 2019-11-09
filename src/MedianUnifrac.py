@@ -1,10 +1,41 @@
 
 import numpy as np
-import re
+import dendropy
 import sys
 import warnings
 
 epsilon = sys.float_info.epsilon
+
+def parse_tree(tree_str):
+	'''
+	(Tint,lint,nodes_in_order) = parse_tree(tree_str)
+	This function will parse a newick tree string and return the dictionary of ancestors Tint.
+	Tint indexes the nodes by integers, Tint[i] = j means j is the ancestor of i.
+	lint is a dictionary returning branch lengths: lint[(i,j)] = w(i,j) the weight of the edge connecting i and j.
+	nodes_in_order is a list of the nodes in the input tree_str such that Tint[i]=j means nodes_in_order[j] is an ancestor
+	of nodes_in_order[i]. Nodes are labeled from the leaves up.
+	'''
+	dtree = dendropy.Tree.get(data=tree_str, schema="newick", suppress_internal_node_taxa=False,store_tree_weights=True)
+	#Name all the internal nodes
+	nodes = dtree.nodes()
+	i=0
+	for node in nodes:
+		if node.taxon == None:
+			node.taxon = dendropy.datamodel.taxonmodel.Taxon(label="temp"+str(i))
+			i = i+1
+	full_nodes_in_order = [item for item in dtree.levelorder_node_iter()]  # i in path from root to j only if i>j
+	full_nodes_in_order.reverse()
+	nodes_in_order = [item.taxon.label for item in full_nodes_in_order]  # i in path from root to j only if i>j
+	Tint = dict()
+	lint = dict()
+	nodes_to_index = dict(zip(nodes_in_order, range(len(nodes_in_order))))
+	for i in range(len(nodes_in_order)):
+		node = full_nodes_in_order[i]
+		parent = node.parent_node
+		if parent != None:
+			Tint[i] = nodes_to_index[parent.taxon.label]
+			lint[nodes_to_index[node.taxon.label], nodes_to_index[parent.taxon.label]] = node.edge.length
+	return (Tint,lint,nodes_in_order)
 
 def parse_tree_file(tree_str_file, suppress_internal_node_taxa=True, suppress_leaf_node_taxa=False):
     '''
@@ -123,4 +154,5 @@ def parse_envs(envs, nodes_in_order):
             warnings.warn("Warning: the sample %s has non-zero counts, do not use for Unifrac calculations" % sample)
         envs_prob_dict[sample] = envs_prob_dict[sample]/envs_prob_dict[sample].sum()
     return (envs_prob_dict, samples)
+
 
