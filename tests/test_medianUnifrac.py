@@ -1,8 +1,16 @@
-from src import MedianUnifrac as MedU
+import sys
+sys.path.append('../MedianUnifrac')
+sys.path.append('../MedianUnifrac/src')
+sys.path.append('../src')
+import MedianUnifrac as MedU
 import numpy as np
 
-(Tint, lint, nodes_in_order) = MedU.parse_tree_file('../data/97_otus_unannotated.tree')
-env_dict = MedU.create_env('../data/289_seqs_otus.txt')
+try:
+    (Tint, lint, nodes_in_order) = MedU.parse_tree_file('data/97_otus_unannotated.tree')
+    env_dict = MedU.create_env('data/289_seqs_otus.txt')
+except FileNotFoundError:
+    (Tint, lint, nodes_in_order) = MedU.parse_tree_file('../data/97_otus_unannotated.tree')
+    env_dict = MedU.create_env('../data/289_seqs_otus.txt')
 (env_prob_dict, samples) = MedU.parse_envs(env_dict, nodes_in_order)
 
 #test parse_tree
