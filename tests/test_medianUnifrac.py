@@ -1,4 +1,3 @@
-
 from src import MedianUnifrac as MedU
 import numpy as np
 
@@ -28,11 +27,16 @@ def test_inverse():
     assert P_pushed1[3] > 10**-18 #P_pushed[3] (edge length 0) is non-zero
     P_inversed1 = MedU.inverse_push_up(P_pushed1, T1, l1, nodes1)
     assert np.sum(abs(P1 - P_inversed1)) < 10**-10 #test inverse_push_up
+    l2 = {(0, 4): 0.1, (1, 4): 0.1, (2, 5): 0.2, (3, 5): 0, (4, 6): 0.2, (5, 6): 0} # more than one edge with 0 edge length, involving the root.
+    y = MedU.epsilon * 0.6
+    P_pushed2 = MedU.push_up(P1, T1, l2, nodes1)
+    answer2 = np.array([0.01, 0.02, 0, x, 0.06, y, 1])
+    assert all(np.abs(P_pushed2 - answer2) < 0.00000001)
     #test with real data
-    P2 = env_prob_dict['232.M2Lsft217']
-    P_pushed2 = MedU.push_up(P2, Tint, lint, nodes_in_order)
-    P_inversed2 = MedU.inverse_push_up(P_pushed2, Tint, lint, nodes_in_order)
-    assert np.sum(abs(P2 - P_inversed2)) < 10**-10
+    Q = env_prob_dict['232.M2Lsft217']
+    Q_pushed = MedU.push_up(Q, Tint, lint, nodes_in_order)
+    Q_inversed = MedU.inverse_push_up(Q_pushed, Tint, lint, nodes_in_order)
+    assert np.sum(abs(Q - Q_inversed)) < 10**-10
 
 #test if push_up computes the correct unifrac value
 def test_push_up():
